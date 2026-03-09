@@ -82,6 +82,7 @@ Rules:
 - choose scope from dominant module/directory
 - keep subject concise and specific
 - prefer multiple commits over one mixed message
+- do not add commit trailers such as `Co-authored-by` unless the user explicitly instructs it
 
 ## 5) Stage Intended Files
 
