@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "type": "command",
+        "bash": "node hooks/postToolUse/markdownlint-cli2.mjs",
+        "powershell": "node hooks/postToolUse/markdownlint-cli2.mjs",
+        "cwd": ".",
+        "timeoutSec": 30
+      },
+      {
+        "type": "command",
+        "bash": "node hooks/postToolUse/biome-oxlint.mjs",
+        "powershell": "node hooks/postToolUse/biome-oxlint.mjs",
+        "cwd": ".",
+        "timeoutSec": 30
+      }
+    ]
+  }
+}
