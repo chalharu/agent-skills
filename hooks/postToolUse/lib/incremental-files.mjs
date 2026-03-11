@@ -73,7 +73,7 @@ export function listGitPaths(repoRoot, args) {
 }
 
 export function toRelativeRepoPath(repoRoot, filePath) {
-  return path.relative(repoRoot, filePath);
+  return path.relative(repoRoot, filePath).split(path.sep).join('/');
 }
 
 export function getFileSignature(filePath) {
@@ -118,16 +118,16 @@ export function getChangedFiles(repoRoot, currentFiles, previousSignatures) {
   });
 }
 
-export function listDirtyFiles(repoRoot, pathspecs, isTargetFile) {
+export function listDirtyFiles(repoRoot) {
   const candidates = unique([
-    ...listGitPaths(repoRoot, ['diff', '--name-only', '-z', '--diff-filter=ACMRTUXB', '--', ...pathspecs]),
-    ...listGitPaths(repoRoot, ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMRTUXB', '--', ...pathspecs]),
-    ...listGitPaths(repoRoot, ['ls-files', '--others', '--exclude-standard', '-z', '--', ...pathspecs])
+    ...listGitPaths(repoRoot, ['diff', '--name-only', '-z', '--diff-filter=ACMRTUXB']),
+    ...listGitPaths(repoRoot, ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMRTUXB']),
+    ...listGitPaths(repoRoot, ['ls-files', '--others', '--exclude-standard', '-z'])
   ]);
 
   return candidates
     .map((relativePath) => path.resolve(repoRoot, relativePath))
-    .filter((filePath) => isTargetFile(filePath));
+    .filter((filePath) => fs.existsSync(filePath) && fs.statSync(filePath).isFile());
 }
 
 export function writeResultOutput(result) {

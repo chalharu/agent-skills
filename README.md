@@ -4,14 +4,12 @@
 
 ## Copilot hooks
 
-`.github/hooks/hooks.json` で `postToolUse` を設定し、Markdown 用の `hooks/postToolUse/markdownlint-cli2.mjs` と JS/TS 用の `hooks/postToolUse/biome-oxlint.mjs` を実行します。
+`.github/hooks/hooks.json` では `postToolUse` を 1 つだけ定義し、`hooks/postToolUse/main.mjs` を起動します。`main.mjs` は標準入力を 1 回だけ読み、Git 差分を 1 回だけ取得し、対象ファイルの判定と linter の切り替えをまとめて行います。
 
-両方のフックは `toolName` に依存せず毎回実行され、Git の差分から dirty な対象ファイルを高速に抽出します。`git diff`, `git diff --cached`, `git ls-files --others --exclude-standard` を使って候補を集め、`.git/.copilot-hooks/` 配下の state と比較して、今回変わったファイルだけを対象にします。
+実行対象は `hooks/postToolUse/linters.json` で定義します。この JSON は `tools` と `pipelines` の 2 セクションだけを持ちます。`tools` は実行コマンドと引数を含む concrete な定義、`pipelines` は regex matcher 配列と実行順、各 step の fallback tools をまとめて表します。
 
-lint は `markdownlint-cli2 --fix` を先に実行し、その後に通常の `markdownlint-cli2` を再実行します。自動修正で解決した内容は表示せず、fix 後も残った違反だけを表示します。
+この構成により、`postToolUse` が複数コマンドへ分かれている場合に発生するプロセス起動、stdin 解析、Git 差分取得の重複を避けられます。dirty な対象ファイルは `.git/.copilot-hooks/post-tool-use-state.json` の署名と比較し、今回変わったものだけを処理します。pipeline は上から評価され、各ファイルは最初にマッチした pipeline にだけ割り当てられます。matcher は regex 配列のみを受け付け、内部では `|` で結合した 1 つの `RegExp` として扱います。
 
-`markdownlint-cli2` が PATH にあればそれを使い、なければ `npx --yes markdownlint-cli2` にフォールバックします。
+Markdown は `markdownlint-cli2 --fix` → 再lint、JS/TS 系 (`.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx`) は `Biome check --write` → `Oxlint --fix` → `Biome check --write` → 再check の順で動きます。自動修正で解決した内容は表示せず、fix 後も残った違反だけを表示します。
 
-JS/TS 系 (`.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx`) は `Biome check --write` と `Oxlint --fix` を自動実行します。その後に `Biome check` と `Oxlint` を再実行し、自動修正後も残った違反だけを表示します。
-
-`biome` と `oxlint` が PATH にあればそれを使い、なければ `npx --yes @biomejs/biome` と `npx --yes oxlint` にフォールバックします。
+各 step はローカル CLI を優先し、必要なら別ツールや `npx` 実行へ順に fallback できます。たとえば JS/TS lint は `oxlint -> eslint -> eslint-npx -> oxlint-npx` の順で試せるようにしています。
