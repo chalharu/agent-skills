@@ -33,9 +33,14 @@ function loadLintersConfig() {
       throw new Error(`Tool "${tool.id}" args must be an array.`);
     }
 
+    if (tool.appendFiles !== undefined && typeof tool.appendFiles !== 'boolean') {
+      throw new Error(`Tool "${tool.id}" appendFiles must be a boolean.`);
+    }
+
     tools.set(tool.id, {
       ...tool,
-      args: tool.args ?? []
+      args: tool.args ?? [],
+      appendFiles: tool.appendFiles ?? true
     });
   }
 
@@ -117,7 +122,8 @@ function runStepWithFallback(repoRoot, toolIds, files) {
 
   for (const toolId of toolIds) {
     const tool = config.tools.get(toolId);
-    const result = runCommand(tool.command, [...tool.args, ...files], repoRoot);
+    const args = tool.appendFiles ? [...tool.args, ...files] : tool.args;
+    const result = runCommand(tool.command, args, repoRoot);
 
     if (!result.error) {
       return result;

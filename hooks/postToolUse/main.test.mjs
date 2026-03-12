@@ -53,7 +53,17 @@ function setupRepo(t, prefix) {
 
 function createToolStubs(
   repo,
-  { markdownlint = true, biome = true, oxlint = true, eslint = false, firstTool = false, secondTool = false } = {}
+  {
+    markdownlint = true,
+    biome = true,
+    oxlint = true,
+    eslint = false,
+    ruff = false,
+    cargo = false,
+    hadolint = false,
+    firstTool = false,
+    secondTool = false
+  } = {}
 ) {
   const binDir = path.join(repo, 'bin');
   const logFile = path.join(repo, 'hook.log');
@@ -120,6 +130,54 @@ function createToolStubs(
     );
   }
 
+  if (ruff) {
+    writeExecutable(
+      path.join(binDir, 'ruff'),
+      [
+        '#!/bin/sh',
+        'printf "ruff %s\\n" "$*" >> "$HOOK_LOG"',
+        'if [ "$1" = "format" ]; then',
+        '  exit 0',
+        'fi',
+        'if [ "$1" = "check" ] && [ "$2" = "--fix" ]; then',
+        '  exit 0',
+        'fi',
+        'printf "ruff unresolved in %s\\n" "$2" >&2',
+        'exit 1'
+      ].join('\n')
+    );
+  }
+
+  if (cargo) {
+    writeExecutable(
+      path.join(binDir, 'cargo'),
+      [
+        '#!/bin/sh',
+        'printf "cargo %s\\n" "$*" >> "$HOOK_LOG"',
+        'if [ "$1" = "fmt" ]; then',
+        '  exit 0',
+        'fi',
+        'if [ "$1" = "clippy" ] && [ "$2" = "--fix" ]; then',
+        '  exit 0',
+        'fi',
+        'printf "clippy unresolved\\n" >&2',
+        'exit 1'
+      ].join('\n')
+    );
+  }
+
+  if (hadolint) {
+    writeExecutable(
+      path.join(binDir, 'hadolint'),
+      [
+        '#!/bin/sh',
+        'printf "hadolint %s\\n" "$*" >> "$HOOK_LOG"',
+        'printf "hadolint unresolved in %s\\n" "$1" >&2',
+        'exit 1'
+      ].join('\n')
+    );
+  }
+
   if (firstTool) {
     writeExecutable(
       path.join(binDir, 'first-tool'),
@@ -169,6 +227,26 @@ function changeDirtyFilesAgain(repo) {
   fs.appendFileSync(path.join(repo, 'index.ts'), 'console.log(value)\n', 'utf8');
 }
 
+function seedPythonRustDockerRepo(repo) {
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'app.py'), 'value = 1\n', 'utf8');
+  fs.writeFileSync(
+    path.join(repo, 'Cargo.toml'),
+    ['[package]', 'name = "demo"', 'version = "0.1.0"', 'edition = "2021"', ''].join('\n'),
+    'utf8'
+  );
+  fs.writeFileSync(path.join(repo, 'src', 'lib.rs'), 'pub fn value() -> i32 { 1 }\n', 'utf8');
+  fs.writeFileSync(path.join(repo, 'Dockerfile'), 'FROM alpine:3.20\nRUN echo hello\n', 'utf8');
+  run('git', ['add', 'app.py', 'Cargo.toml', 'src/lib.rs', 'Dockerfile'], { cwd: repo });
+  run('git', ['commit', '-m', 'init'], { cwd: repo, stdio: 'ignore' });
+}
+
+function makePythonRustDockerDirty(repo) {
+  fs.writeFileSync(path.join(repo, 'app.py'), 'value=1\n', 'utf8');
+  fs.writeFileSync(path.join(repo, 'src', 'lib.rs'), 'pub fn value()->i32{1}\n', 'utf8');
+  fs.writeFileSync(path.join(repo, 'Dockerfile'), 'FROM alpine:3.20\nRUN apk add curl\n', 'utf8');
+}
+
 function runHook(repo, env, toolResultType = 'success') {
   return run(process.execPath, ['hooks/postToolUse/main.mjs'], {
     cwd: repo,
@@ -188,21 +266,29 @@ test('hooks config uses one main postToolUse command', () => {
   assert.equal(hooksConfig.hooks.postToolUse[0].powershell, 'node hooks/postToolUse/main.mjs');
 });
 
-test('linters config defines concrete tools and regex pipelines', () => {
+test('linters config defines concrete tools and language pipelines', () => {
   const lintersConfig = JSON.parse(fs.readFileSync(lintersConfigPath, 'utf8'));
   const markdownlintFixNpx = lintersConfig.tools.find((tool) => tool.id === 'markdownlint-fix-npx');
-  const markdownPipeline = lintersConfig.pipelines[0];
-  const scriptsPipeline = lintersConfig.pipelines[1];
+  const cargoFmt = lintersConfig.tools.find((tool) => tool.id === 'cargo-fmt');
+  const markdownPipeline = lintersConfig.pipelines.find((pipeline) => pipeline.id === 'markdown');
+  const scriptsPipeline = lintersConfig.pipelines.find((pipeline) => pipeline.id === 'scripts');
+  const pythonPipeline = lintersConfig.pipelines.find((pipeline) => pipeline.id === 'python');
+  const rustPipeline = lintersConfig.pipelines.find((pipeline) => pipeline.id === 'rust');
+  const dockerPipeline = lintersConfig.pipelines.find((pipeline) => pipeline.id === 'dockerfile');
 
   assert.equal(markdownlintFixNpx.command, 'npx');
   assert.deepEqual(markdownlintFixNpx.args, ['--yes', 'markdownlint-cli2', '--fix']);
+  assert.equal(cargoFmt.appendFiles, false);
   assert.equal(markdownPipeline.id, 'markdown');
   assert.deepEqual(markdownPipeline.matcher, ['\\.(?:md|markdown)$']);
   assert.deepEqual(markdownPipeline.steps[0].tools, ['markdownlint-fix', 'markdownlint-fix-npx']);
   assert.equal(scriptsPipeline.id, 'scripts');
   assert.deepEqual(scriptsPipeline.matcher, ['\\.(?:[cm]?[jt]s|[jt]sx)$']);
   assert.deepEqual(scriptsPipeline.steps[1].tools, ['oxlint-fix', 'eslint-fix', 'eslint-fix-npx', 'oxlint-fix-npx']);
-  assert.equal(scriptsPipeline.steps.length, 5);
+  assert.deepEqual(pythonPipeline.matcher, ['\\.(?:py|pyi|pyw)$']);
+  assert.deepEqual(rustPipeline.matcher, ['\\.rs$']);
+  assert.deepEqual(dockerPipeline.matcher, ['(?:^|/)Dockerfile(?:\\.[^/]+)?$', '(?:^|/)[^/]+\\.Dockerfile$']);
+  assert.equal(lintersConfig.pipelines.length, 5);
 });
 
 test('main hook parses input once and runs configured linters incrementally', (t) => {
@@ -256,6 +342,38 @@ test('main hook can fall back from oxlint to eslint', (t) => {
   assert.match(hookLog, /eslint --fix index\.ts/);
   assert.match(result.stderr, /JavaScript\/TypeScript linter reported unresolved issues:/);
   assert.match(result.stderr, /eslint unresolved in index\.ts/);
+});
+
+test('main hook runs Python Rust and Dockerfile pipelines', (t) => {
+  const repo = setupRepo(t, 'hook-extra-languages-');
+  seedPythonRustDockerRepo(repo);
+  makePythonRustDockerDirty(repo);
+
+  const { env, logFile } = createToolStubs(repo, {
+    markdownlint: false,
+    biome: false,
+    oxlint: false,
+    eslint: false,
+    ruff: true,
+    cargo: true,
+    hadolint: true
+  });
+  const result = runHook(repo, env);
+  const hookLog = fs.readFileSync(logFile, 'utf8');
+
+  assert.equal(result.status, 1);
+  assert.match(hookLog, /ruff format app\.py/);
+  assert.match(hookLog, /ruff check --fix app\.py/);
+  assert.match(hookLog, /cargo fmt --all/);
+  assert.match(hookLog, /cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets/);
+  assert.equal(hookLog.includes('cargo fmt --all src/lib.rs'), false);
+  assert.match(hookLog, /hadolint Dockerfile/);
+  assert.match(result.stderr, /Ruff reported unresolved issues:/);
+  assert.match(result.stderr, /Rust linter reported unresolved issues:/);
+  assert.match(result.stderr, /Hadolint reported unresolved issues:/);
+  assert.match(result.stderr, /ruff unresolved in app\.py/);
+  assert.match(result.stderr, /clippy unresolved/);
+  assert.match(result.stderr, /hadolint unresolved in Dockerfile/);
 });
 
 test('main hook uses the first matching pipeline', (t) => {

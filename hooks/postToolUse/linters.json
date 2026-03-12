@@ -120,6 +120,68 @@
         "--yes",
         "eslint"
       ]
+    },
+    {
+      "id": "ruff-format",
+      "command": "ruff",
+      "args": [
+        "format"
+      ]
+    },
+    {
+      "id": "ruff-check-fix",
+      "command": "ruff",
+      "args": [
+        "check",
+        "--fix"
+      ]
+    },
+    {
+      "id": "ruff-check",
+      "command": "ruff",
+      "args": [
+        "check"
+      ]
+    },
+    {
+      "id": "cargo-fmt",
+      "command": "cargo",
+      "args": [
+        "fmt",
+        "--all"
+      ],
+      "appendFiles": false
+    },
+    {
+      "id": "cargo-clippy-fix",
+      "command": "cargo",
+      "args": [
+        "clippy",
+        "--fix",
+        "--allow-dirty",
+        "--allow-staged",
+        "--workspace",
+        "--all-targets"
+      ],
+      "appendFiles": false
+    },
+    {
+      "id": "cargo-clippy-check",
+      "command": "cargo",
+      "args": [
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "appendFiles": false
+    },
+    {
+      "id": "hadolint-check",
+      "command": "hadolint",
+      "args": []
     }
   ],
   "pipelines": [
@@ -188,6 +250,84 @@
           ],
           "reportFailure": true,
           "failureLabel": "JavaScript/TypeScript linter reported unresolved issues:"
+        }
+      ]
+    },
+    {
+      "id": "python",
+      "matcher": [
+        "\\.(?:py|pyi|pyw)$"
+      ],
+      "steps": [
+        {
+          "tools": [
+            "ruff-format"
+          ]
+        },
+        {
+          "tools": [
+            "ruff-check-fix"
+          ]
+        },
+        {
+          "tools": [
+            "ruff-format"
+          ]
+        },
+        {
+          "tools": [
+            "ruff-check"
+          ],
+          "reportFailure": true,
+          "failureLabel": "Ruff reported unresolved issues:"
+        }
+      ]
+    },
+    {
+      "id": "rust",
+      "matcher": [
+        "\\.rs$"
+      ],
+      "steps": [
+        {
+          "tools": [
+            "cargo-fmt"
+          ],
+          "reportFailure": true,
+          "failureLabel": "cargo fmt reported unresolved issues:"
+        },
+        {
+          "tools": [
+            "cargo-clippy-fix"
+          ]
+        },
+        {
+          "tools": [
+            "cargo-fmt"
+          ]
+        },
+        {
+          "tools": [
+            "cargo-clippy-check"
+          ],
+          "reportFailure": true,
+          "failureLabel": "Rust linter reported unresolved issues:"
+        }
+      ]
+    },
+    {
+      "id": "dockerfile",
+      "matcher": [
+        "(?:^|/)Dockerfile(?:\\.[^/]+)?$",
+        "(?:^|/)[^/]+\\.Dockerfile$"
+      ],
+      "steps": [
+        {
+          "tools": [
+            "hadolint-check"
+          ],
+          "reportFailure": true,
+          "failureLabel": "Hadolint reported unresolved issues:"
         }
       ]
     }
