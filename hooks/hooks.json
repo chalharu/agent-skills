@@ -4,8 +4,8 @@
     "postToolUse": [
       {
         "type": "command",
-        "bash": "node hooks/postToolUse/main.mjs",
-        "powershell": "node hooks/postToolUse/main.mjs",
+        "bash": "node .github/hooks/postToolUse/main.mjs",
+        "powershell": "node .github/hooks/postToolUse/main.mjs",
         "cwd": ".",
         "timeoutSec": 30
       }
